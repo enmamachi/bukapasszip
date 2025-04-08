@@ -6,17 +6,18 @@ let found = false; // Variabel untuk menandai jika password ditemukan
 function tryPassword(zipFilePath, password) {
     try {
         const zip = new AdmZip(zipFilePath);
+        console.log(`Mencoba password: ${password}`); // Log password yang sedang dicoba
         zip.extractAllTo("output", true, password);
         console.log(`Password ditemukan: ${password}`);
         found = true; // Tandai bahwa password telah ditemukan
         return true; // Kembalikan true jika password ditemukan
     } catch (err) {
         // Log kesalahan jika password salah
-        if (err.message.includes("Invalid password")) {
-            // Password salah, tidak perlu log lebih lanjut
-            return false; 
+        if (err.message.includes("Incompatible password parameter")) {
+            console.error(`Password tidak kompatibel: ${password}`);
+        } else {
+            console.error(`Kesalahan saat mencoba password ${password}: ${err.message}`);
         }
-        console.error(`Kesalahan saat mencoba password ${password}: ${err.message}`);
         return false; 
     }
 }
