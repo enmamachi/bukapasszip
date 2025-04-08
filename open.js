@@ -1,24 +1,24 @@
 const AdmZip = require('adm-zip');
 const fs = require('fs');
 
-let found = false; // Variabel untuk menandai jika password ditemukan
+let found = false; // Variable to indicate if the password has been found
 
 function tryPassword(zipFilePath, password) {
     try {
         const zip = new AdmZip(zipFilePath);
-        console.log(`Mencoba password: ${password}`); // Log password yang sedang dicoba
         zip.extractAllTo("output", true, password);
-        console.log(`Password ditemukan: ${password}`);
-        found = true; // Tandai bahwa password telah ditemukan
-        return true; // Kembalikan true jika password ditemukan
+        console.log(`Password found: ${password}`);
+        found = true; // Mark that the password has been found
+        return true; // Return true if the password is found
     } catch (err) {
-        // Log kesalahan jika password salah
+        // Log error if the password is incorrect
         if (err.message.includes("Incompatible password parameter")) {
-            console.error(`Password tidak kompatibel: ${password}`);
+            // This error indicates the password is incorrect
+            return false; 
         } else {
-            console.error(`Kesalahan saat mencoba password ${password}: ${err.message}`);
+            console.error(`Error trying password ${password}: ${err.message}`);
+            return false; 
         }
-        return false; 
     }
 }
 
@@ -27,35 +27,35 @@ function bruteForce(zipFilePath, charset, length) {
     let count = 0;
 
     function generatePassword(currentPassword) {
-        if (found) return; // Jika password sudah ditemukan, hentikan eksekusi
+        if (found) return; // If the password has been found, stop execution
 
         if (currentPassword.length === length) {
-            if (tryPassword(zipFilePath, currentPassword)) {
-                return; // Jika password ditemukan, hentikan eksekusi
-            }
             count++;
-            console.log(`Mencoba password: ${currentPassword} (${count}/${totalCombinations})`);
+            console.log(`Trying password: ${currentPassword} (${count}/${totalCombinations})`);
+            if (tryPassword(zipFilePath, currentPassword)) {
+                return; // If the password is found, stop execution
+            }
             return;
         }
 
         for (let i = 0; i < charset.length; i++) {
             generatePassword(currentPassword + charset[i]);
-            if (found) return; // Periksa lagi setelah setiap panggilan rekursif
+            if (found) return; // Check again after each recursive call
         }
     }
 
     generatePassword("");
 }
 
-// Konfigurasi
-const zipFilePath = "D:\\project\\bukapasszip\\a.zip"; // Ganti dengan path file ZIP Anda
-const charset = "clg"; // Charset dengan 3 karakter
-const length = 4; // Panjang password yang akan dicoba
+// Configuration
+const zipFilePath = "D:\\project\\bukapasszip\\a.zip"; // Change to your ZIP file path
+const charset = "clg"; // Charset with 3 characters
+const length = 4; // Length of the password to try
 
-// Pastikan direktori output ada
+// Ensure the output directory exists
 if (!fs.existsSync("output")) {
     fs.mkdirSync("output");
 }
 
-// Mulai brute force
+// Start brute force
 bruteForce(zipFilePath, charset, length);
