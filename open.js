@@ -1,4 +1,5 @@
 const AdmZip = require('adm-zip');
+const fs = require('fs');
 
 let found = false; // Variabel untuk menandai jika password ditemukan
 
@@ -11,6 +12,10 @@ function tryPassword(zipFilePath, password) {
         return true; // Kembalikan true jika password ditemukan
     } catch (err) {
         // Log kesalahan jika password salah
+        if (err.message.includes("Invalid password")) {
+            // Password salah, tidak perlu log lebih lanjut
+            return false; 
+        }
         console.error(`Kesalahan saat mencoba password ${password}: ${err.message}`);
         return false; 
     }
@@ -45,6 +50,11 @@ function bruteForce(zipFilePath, charset, length) {
 const zipFilePath = "D:\\project\\bukapasszip\\a.zip"; // Ganti dengan path file ZIP Anda
 const charset = "clg"; // Charset dengan 3 karakter
 const length = 4; // Panjang password yang akan dicoba
+
+// Pastikan direktori output ada
+if (!fs.existsSync("output")) {
+    fs.mkdirSync("output");
+}
 
 // Mulai brute force
 bruteForce(zipFilePath, charset, length);
