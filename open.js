@@ -10,8 +10,7 @@ function tryPassword(zipFilePath, password) {
         found = true; // Tandai bahwa password telah ditemukan
         return true; // Kembalikan true jika password ditemukan
     } catch (err) {
-        // Jika ada kesalahan, kita anggap password salah
-        return false;
+        return false; // Jika ada kesalahan, kita anggap password salah
     }
 }
 
@@ -41,8 +40,8 @@ function bruteForce(zipFilePath, charset, length) {
 }
 
 // Konfigurasi
-const zipFilePath = "path/to/your/file.zip"; // Ganti dengan path file ZIP Anda
-const charset = "abcdefghijklmnopqrstuvwxyz0123456789"; // Karakter yang akan digunakan
+const zipFilePath = "D:\project\bukapasszip\a.zip"; // Ganti dengan path file ZIP Anda
+const charset = "clg"; // Charset dengan 3 karakter
 const length = 4; // Panjang password yang akan dicoba
 
 // Mulai brute force
