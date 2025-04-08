@@ -1,14 +1,16 @@
 const AdmZip = require('adm-zip');
 
+let found = false; // Variabel untuk menandai jika password ditemukan
+
 function tryPassword(zipFilePath, password) {
     try {
         const zip = new AdmZip(zipFilePath);
         zip.extractAllTo("output", true, password);
         console.log(`Password ditemukan: ${password}`);
-        process.exit(0);
+        found = true; // Tandai bahwa password telah ditemukan
+        process.exit(0); // Keluar dari proses
     } catch (err) {
         // Jika ada kesalahan, kita anggap password salah
-        console.log(`Password salah: ${password}`);
         return false;
     }
 }
@@ -18,6 +20,8 @@ function bruteForce(zipFilePath, charset, length) {
     let count = 0;
 
     function generatePassword(currentPassword) {
+        if (found) return; // Jika password sudah ditemukan, hentikan eksekusi
+
         if (currentPassword.length === length) {
             tryPassword(zipFilePath, currentPassword);
             count++;
