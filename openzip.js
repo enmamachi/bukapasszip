@@ -26,7 +26,7 @@ function bruteForce(zipFilePath, charset, length, currentPassword = "") {
 }
 
 // Konfigurasi
-const zipFilePath = "path/to/your/file.zip"; // Ganti dengan path file ZIP Anda
+const zipFilePath = "D:\project\bukapasszip\a.zip"; // Ganti dengan path file ZIP Anda
 const charset = "abcdefghijklmnopqrstuvwxyz"; // Karakter yang akan digunakan
 const length = 4; // Panjang password yang akan dicoba
 
