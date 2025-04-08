@@ -10,8 +10,8 @@ function tryPassword(zipFilePath, password) {
         found = true; // Tandai bahwa password telah ditemukan
         return true; // Kembalikan true jika password ditemukan
     } catch (err) {
-        // Jika ada kesalahan, kita anggap password salah
-        // console.error(`Kesalahan saat mencoba password ${password}: ${err.message}`);
+        // Log kesalahan jika password salah
+        console.error(`Kesalahan saat mencoba password ${password}: ${err.message}`);
         return false; 
     }
 }
