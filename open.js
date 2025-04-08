@@ -8,7 +8,7 @@ function tryPassword(zipFilePath, password) {
         zip.extractAllTo("output", true, password);
         console.log(`Password ditemukan: ${password}`);
         found = true; // Tandai bahwa password telah ditemukan
-        process.exit(0); // Keluar dari proses
+        return true; // Kembalikan true jika password ditemukan
     } catch (err) {
         // Jika ada kesalahan, kita anggap password salah
         return false;
@@ -23,7 +23,9 @@ function bruteForce(zipFilePath, charset, length) {
         if (found) return; // Jika password sudah ditemukan, hentikan eksekusi
 
         if (currentPassword.length === length) {
-            tryPassword(zipFilePath, currentPassword);
+            if (tryPassword(zipFilePath, currentPassword)) {
+                return; // Jika password ditemukan, hentikan eksekusi
+            }
             count++;
             console.log(`Mencoba password: ${currentPassword} (${count}/${totalCombinations})`);
             return;
@@ -31,6 +33,7 @@ function bruteForce(zipFilePath, charset, length) {
 
         for (let i = 0; i < charset.length; i++) {
             generatePassword(currentPassword + charset[i]);
+            if (found) return; // Periksa lagi setelah setiap panggilan rekursif
         }
     }
 
@@ -39,7 +42,7 @@ function bruteForce(zipFilePath, charset, length) {
 
 // Konfigurasi
 const zipFilePath = "path/to/your/file.zip"; // Ganti dengan path file ZIP Anda
-const charset = "cgl"; // Karakter yang akan digunakan
+const charset = "abcdefghijklmnopqrstuvwxyz0123456789"; // Karakter yang akan digunakan
 const length = 4; // Panjang password yang akan dicoba
 
 // Mulai brute force
