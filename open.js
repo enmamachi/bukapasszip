@@ -39,7 +39,7 @@ function bruteForce(zipFilePath, charset, length) {
 
 // Konfigurasi
 const zipFilePath = "path/to/your/file.zip"; // Ganti dengan path file ZIP Anda
-const charset = "abcdefghijklmnopqrstuvwxyz0123456789"; // Karakter yang akan digunakan
+const charset = "cgl"; // Karakter yang akan digunakan
 const length = 4; // Panjang password yang akan dicoba
 
 // Mulai brute force
