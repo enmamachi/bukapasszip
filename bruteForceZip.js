@@ -103,7 +103,7 @@ async function bruteForce(zipFilePath, charset, length) {
 }
 
 if (isMainThread) {
-    const zipFilePath = "path/to/your/file.zip";
+    const zipFilePath = "D:\\project\\bukapasszip\\a.zip";
     const charset = "clg"; // Your test charset
     const length = 4;
     
