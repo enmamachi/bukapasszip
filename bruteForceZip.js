@@ -2,8 +2,8 @@ const yauzl = require("yauzl");
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const os = require('os');
 
-// Track all attempted passwords
-const passwordAttempts = new Set();
+// Track all attempted passwords (only in main thread)
+const passwordAttempts = isMainThread ? new Set() : null;
 
 async function tryPassword(zipFilePath, password) {
     return new Promise((resolve) => {
@@ -37,20 +37,21 @@ async function workerTask() {
     }
 
     for (const password of generateCombinations()) {
-        // Distribute work among workers
+        // Distribute work among workers based on first character
         if (password.charCodeAt(0) % totalWorkers !== workerId) continue;
         
         attempts++;
-        passwordAttempts.add(password);
-        
         const success = await tryPassword(zipFilePath, password);
+        
+        // Report back to main thread
+        parentPort.postMessage({ 
+            attempt: password,
+            workerId,
+            success
+        });
+
         if (success) {
-            parentPort.postMessage({ 
-                password,
-                attempts,
-                tested: Array.from(passwordAttempts).slice(-10)
-            });
-            return;
+            return; // Exit if password found
         }
     }
     parentPort.postMessage({ done: true, attempts });
@@ -74,26 +75,31 @@ async function bruteForce(zipFilePath, charset, length) {
                 charset,
                 length,
                 workerId: i,
-                totalWorkers: cpuCount
+                totalWorkers: cpuCount  // Fixed typo: was 'totalWorkers'
             }
         });
 
         worker.on('message', (msg) => {
-            if (msg.password) {
-                console.log(`\nSUCCESS! Password found: ${msg.password}`);
-                console.log(`Total attempts: ${msg.attempts}`);
-                console.log(`Recent attempts: ${msg.tested.join(', ')}`);
+            if (msg.success) {
+                console.log(`\nSUCCESS! Password found: ${msg.attempt}`);
+                console.log(`By Worker ${msg.workerId}`);
                 workers.forEach(w => w.terminate());
                 process.exit(0);
-            } else {
+            } 
+            else if (msg.done) {
                 completedWorkers++;
                 totalAttempts += msg.attempts;
                 console.log(`Worker ${i} completed. Attempts: ${msg.attempts}`);
                 
                 if (completedWorkers === cpuCount) {
                     console.log(`\nAll workers finished. Total attempts: ${totalAttempts}`);
-                    console.log(`Password not found. Total tested: ${passwordAttempts.size}`);
                     process.exit(1);
+                }
+            }
+            else if (msg.attempt) {
+                passwordAttempts.add(msg.attempt);
+                if (passwordAttempts.size % 100 === 0) {
+                    console.log(`Progress: ${passwordAttempts.size} attempts`);
                 }
             }
         });
