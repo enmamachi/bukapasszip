@@ -2,71 +2,62 @@ const yauzl = require("yauzl");
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const os = require('os');
 
-// Debugging tracker
+// Track all attempted passwords
 const passwordAttempts = new Set();
-let attemptCount = 0;
 
-// Generator function that produces all possible passwords
-function* generatePasswords(charset, maxLength, current = '') {
-    if (current.length === maxLength) {
-        yield current;
-        return;
-    }
-    for (const char of charset) {
-        yield* generatePasswords(charset, maxLength, current + char);
-    }
+async function tryPassword(zipFilePath, password) {
+    return new Promise((resolve) => {
+        yauzl.open(zipFilePath, { password }, (err, zipFile) => {
+            if (err) {
+                if (err.code === 'BAD_PASSWORD' || err.message.includes('bad password')) {
+                    return resolve(false);
+                }
+                console.error('Error:', err);
+                process.exit(1);
+            }
+            zipFile.close();
+            resolve(true);
+        });
+    });
 }
 
-// Worker function
 async function workerTask() {
-    const { zipFilePath, charset, length, workerId } = workerData;
-    const startTime = Date.now();
+    const { zipFilePath, charset, length, workerId, totalWorkers } = workerData;
+    let attempts = 0;
     
-    console.log(`Worker ${workerId} started`);
-    
-    for (const password of generatePasswords(charset, length)) {
-        // Skip passwords not meant for this worker (for distribution)
-        if (password.charCodeAt(0) % workerData.totalWorkers !== workerId) {
-            continue;
+    // Generate all possible combinations
+    function* generateCombinations(current = '') {
+        if (current.length === length) {
+            yield current;
+            return;
         }
+        for (const char of charset) {
+            yield* generateCombinations(current + char);
+        }
+    }
 
-        attemptCount++;
+    for (const password of generateCombinations()) {
+        // Distribute work among workers
+        if (password.charCodeAt(0) % totalWorkers !== workerId) continue;
+        
+        attempts++;
         passwordAttempts.add(password);
         
-        if (attemptCount % 1000 === 0) {
-            console.log(`Worker ${workerId} tried ${attemptCount} passwords... Last tried: ${password}`);
-        }
-
-        const success = await new Promise(resolve => {
-            yauzl.open(zipFilePath, { password }, (err, zipFile) => {
-                if (err) {
-                    if (err.code === 'BAD_PASSWORD') {
-                        return resolve(false);
-                    }
-                    console.error(`Worker ${workerId} error:`, err);
-                    process.exit(1);
-                }
-                zipFile.close();
-                resolve(true);
-            });
-        });
-
+        const success = await tryPassword(zipFilePath, password);
         if (success) {
             parentPort.postMessage({ 
                 password,
-                attempts: attemptCount,
-                duration: (Date.now() - startTime) / 1000 + 's'
+                attempts,
+                tested: Array.from(passwordAttempts).slice(-10)
             });
             return;
         }
     }
-    parentPort.postMessage({ done: true });
+    parentPort.postMessage({ done: true, attempts });
 }
 
 async function bruteForce(zipFilePath, charset, length) {
-    if (!isMainThread) return;
-
-    const cpuCount = Math.min(os.cpus().length, charset.length); // Don't create more workers than charset length
+    const cpuCount = Math.min(os.cpus().length, charset.length);
     const workers = [];
     let completedWorkers = 0;
     let totalAttempts = 0;
@@ -90,33 +81,20 @@ async function bruteForce(zipFilePath, charset, length) {
         worker.on('message', (msg) => {
             if (msg.password) {
                 console.log(`\nSUCCESS! Password found: ${msg.password}`);
-                console.log(`Attempts: ${msg.attempts}`);
-                console.log(`Time: ${msg.duration}`);
-                console.log(`Tested passwords:`, Array.from(passwordAttempts).slice(-10));
-                
-                // Terminate all workers
+                console.log(`Total attempts: ${msg.attempts}`);
+                console.log(`Recent attempts: ${msg.tested.join(', ')}`);
                 workers.forEach(w => w.terminate());
                 process.exit(0);
-            } else if (msg.done) {
+            } else {
                 completedWorkers++;
-                totalAttempts += msg.attempts || 0;
-                console.log(`Worker ${i} completed. Total completed: ${completedWorkers}/${cpuCount}`);
+                totalAttempts += msg.attempts;
+                console.log(`Worker ${i} completed. Attempts: ${msg.attempts}`);
                 
                 if (completedWorkers === cpuCount) {
                     console.log(`\nAll workers finished. Total attempts: ${totalAttempts}`);
-                    console.log(`Password not found among tested combinations.`);
+                    console.log(`Password not found. Total tested: ${passwordAttempts.size}`);
                     process.exit(1);
                 }
-            }
-        });
-
-        worker.on('error', (err) => {
-            console.error(`Worker ${i} error:`, err);
-        });
-
-        worker.on('exit', (code) => {
-            if (code !== 0) {
-                console.error(`Worker ${i} stopped with exit code ${code}`);
             }
         });
 
@@ -124,14 +102,12 @@ async function bruteForce(zipFilePath, charset, length) {
     }
 }
 
-// Entry point
 if (isMainThread) {
     const zipFilePath = "path/to/your/file.zip";
-    const charset = "abcdefghijklmnopqrstuvwxyz"; // Try with "abcde" first for testing
+    const charset = "clg"; // Your test charset
     const length = 4;
     
-    bruteForce(zipFilePath, charset, length)
-        .catch(console.error);
+    bruteForce(zipFilePath, charset, length).catch(console.error);
 } else {
     workerTask().catch(console.error);
 }
