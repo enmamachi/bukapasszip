@@ -2,7 +2,11 @@ const yauzl = require("yauzl");
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const os = require('os');
 
-// Optimized password generator using iteration instead of recursion
+// Debugging tracker
+const passwordAttempts = new Set();
+let attemptCount = 0;
+
+// Generator function that produces all possible passwords
 function* generatePasswords(charset, maxLength, current = '') {
     if (current.length === maxLength) {
         yield current;
@@ -13,89 +17,117 @@ function* generatePasswords(charset, maxLength, current = '') {
     }
 }
 
-// Worker function for parallel processing
+// Worker function
 async function workerTask() {
-    const { zipFilePath, charset, length, startChar, endChar } = workerData;
+    const { zipFilePath, charset, length, workerId } = workerData;
+    const startTime = Date.now();
     
-    // Modified generator that only produces passwords in the worker's range
-    function* workerPasswordGenerator() {
-        const prefixLen = startChar.length;
-        for (let p of generatePasswords(charset, length - prefixLen)) {
-            const password = startChar + p;
-            if (password > endChar) return;
-            yield password;
+    console.log(`Worker ${workerId} started`);
+    
+    for (const password of generatePasswords(charset, length)) {
+        // Skip passwords not meant for this worker (for distribution)
+        if (password.charCodeAt(0) % workerData.totalWorkers !== workerId) {
+            continue;
         }
-    }
 
-    for (const password of workerPasswordGenerator()) {
+        attemptCount++;
+        passwordAttempts.add(password);
+        
+        if (attemptCount % 1000 === 0) {
+            console.log(`Worker ${workerId} tried ${attemptCount} passwords... Last tried: ${password}`);
+        }
+
         const success = await new Promise(resolve => {
             yauzl.open(zipFilePath, { password }, (err, zipFile) => {
-                if (err) return resolve(false);
+                if (err) {
+                    if (err.code === 'BAD_PASSWORD') {
+                        return resolve(false);
+                    }
+                    console.error(`Worker ${workerId} error:`, err);
+                    process.exit(1);
+                }
                 zipFile.close();
                 resolve(true);
             });
         });
 
         if (success) {
-            parentPort.postMessage({ password });
-            process.exit(0);
+            parentPort.postMessage({ 
+                password,
+                attempts: attemptCount,
+                duration: (Date.now() - startTime) / 1000 + 's'
+            });
+            return;
         }
     }
     parentPort.postMessage({ done: true });
 }
 
-// Main function
 async function bruteForce(zipFilePath, charset, length) {
     if (!isMainThread) return;
 
-    const cpuCount = os.cpus().length;
+    const cpuCount = Math.min(os.cpus().length, charset.length); // Don't create more workers than charset length
     const workers = [];
-    let found = false;
+    let completedWorkers = 0;
+    let totalAttempts = 0;
 
-    // Split work among workers by first character
-    const segmentSize = Math.ceil(charset.length / cpuCount);
-    
+    console.log(`Starting brute force with ${cpuCount} workers...`);
+    console.log(`Character set: ${charset}`);
+    console.log(`Password length: ${length}`);
+    console.log(`Total possible combinations: ${Math.pow(charset.length, length)}`);
+
     for (let i = 0; i < cpuCount; i++) {
-        const startIdx = i * segmentSize;
-        const endIdx = Math.min(startIdx + segmentSize, charset.length);
-        const startChar = charset[startIdx] || '';
-        const endChar = charset[endIdx - 1] || charset[charset.length - 1];
-
         const worker = new Worker(__filename, {
             workerData: {
                 zipFilePath,
                 charset,
                 length,
-                startChar,
-                endChar
+                workerId: i,
+                totalWorkers: cpuCount
             }
         });
 
         worker.on('message', (msg) => {
             if (msg.password) {
-                console.log(`Password found: ${msg.password}`);
+                console.log(`\nSUCCESS! Password found: ${msg.password}`);
+                console.log(`Attempts: ${msg.attempts}`);
+                console.log(`Time: ${msg.duration}`);
+                console.log(`Tested passwords:`, Array.from(passwordAttempts).slice(-10));
+                
+                // Terminate all workers
                 workers.forEach(w => w.terminate());
-                found = true;
+                process.exit(0);
+            } else if (msg.done) {
+                completedWorkers++;
+                totalAttempts += msg.attempts || 0;
+                console.log(`Worker ${i} completed. Total completed: ${completedWorkers}/${cpuCount}`);
+                
+                if (completedWorkers === cpuCount) {
+                    console.log(`\nAll workers finished. Total attempts: ${totalAttempts}`);
+                    console.log(`Password not found among tested combinations.`);
+                    process.exit(1);
+                }
+            }
+        });
+
+        worker.on('error', (err) => {
+            console.error(`Worker ${i} error:`, err);
+        });
+
+        worker.on('exit', (code) => {
+            if (code !== 0) {
+                console.error(`Worker ${i} stopped with exit code ${code}`);
             }
         });
 
         workers.push(worker);
-    }
-
-    // Cleanup if all workers finish
-    await Promise.all(workers.map(w => new Promise(resolve => {
-        w.on('exit', resolve);
-    })));
-
-    if (!found) {
-        console.log('Password not found');
     }
 }
 
 // Entry point
 if (isMainThread) {
     const zipFilePath = "path/to/your/file.zip";
-    const charset = "abcdefghijklmnopqrstuvwxyz";
+    const charset = "abcdefghijklmnopqrstuvwxyz"; // Try with "abcde" first for testing
     const length = 4;
     
     bruteForce(zipFilePath, charset, length)
